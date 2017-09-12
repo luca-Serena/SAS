@@ -86,6 +86,8 @@ public class RobodromeView extends JComponent {
     private int dragOriginY;
 
     private LinkedList<Animation> animationsQueue;
+    private LinkedList<Animation> animationsQueueStorage;
+    private boolean pauseOn = false;
     private boolean transitioning;
     private Animation currentAnimation;
 
@@ -321,8 +323,7 @@ public class RobodromeView extends JComponent {
      * @param visible true se il robot è inizialmente visibile
      */
     public void placeRobot(RobotMarker robot, Direction dir, int row, int col, boolean visible) {
-        if (!this.isPlayingAnimation()) {
-            
+        if (!this.isPlayingAnimation()) {          
             MovableElement me =  new MovableElement(robot.getImage(cellSize), Direction.E);
             me.setBoardPosition(row, col);
             me.setPosX(col * cellSize + cellSize / 2 + BORDER);
@@ -468,6 +469,10 @@ public class RobodromeView extends JComponent {
      * Dà inizio alla riproduzione delle animazioni inserite in coda.
      */
     public void play() {
+        /*if(pauseOn == true){
+           this.animationsQueue= animationsQueueStorage; 
+           pauseOn=false;
+        }*/
         if (!isPlayingAnimation() && !this.animationsQueue.isEmpty()) {
             this.currentAnimation = null;
             playingAnimation = true;
@@ -719,7 +724,7 @@ public class RobodromeView extends JComponent {
         }
     }
 
-    private void finishAnimation(long elapsed, long step) {
+    public void finishAnimation(long elapsed, long step) {
         if (currentAnimation.isRobotMove()) {
             RobotMoveAnimation ani = (RobotMoveAnimation) currentAnimation;
             MovableElement theRobot = robotMarkers.get(ani.getWhich());
@@ -906,5 +911,21 @@ public class RobodromeView extends JComponent {
      */
     public void removeObserver(RobodromeAnimationObserver obs) {
         observers.remove(obs);
+    }
+    
+    public void removeAllAnimations(){
+        this.playingAnimation = false;
+        pauseOn = true;
+        animationsQueueStorage = this.animationsQueue; 
+        try{
+            Thread.sleep(1000);
+        }catch (Exception exc) {
+            System.out.println(exc);
+            
+        }
+        this.animationsQueue.clear();
+        for (RobodromeAnimationObserver obs : observers) {
+            obs.animationFinished();
+        }
     }
 }

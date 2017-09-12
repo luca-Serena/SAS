@@ -1,44 +1,46 @@
 package robogp.matchmanager;
 
-import connection.Connection;
-import connection.Message;
-import connection.MessageObserver;
-import connection.PartnerShutDownException;
+import Match.Card;
 import java.awt.CardLayout;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
 import javax.swing.JOptionPane;
+import robogp.robodrome.BeltCell;
+import robogp.robodrome.BoardCell;
+import robogp.robodrome.Direction;
+import robogp.robodrome.FloorCell;
+import robogp.robodrome.PitCell;
 import robogp.robodrome.Robodrome;
+import robogp.robodrome.Rotation;
 import robogp.robodrome.view.RobodromeView;
 
 /**
  *
  * @author claudia
  */
-public class MatchManagerApp extends javax.swing.JFrame implements MessageObserver {
-
+public class MatchManagerApp extends javax.swing.JFrame {
+    
     private static MatchManagerApp singleInstance;
     private RobotStatePanel[] robotPanel;
-    private RobodromeView rdView;
-
+    public static RobodromeView rdView;
+    private int TOTALROBOTS;
+    
     private MatchManagerApp() {
         initComponents();
         this.inizPartCtrl = IniziarePartitaController.getInstance();
         this.robotChooser = new RobotChooser(this, true);
     }
-
+    
     public static MatchManagerApp getAppInstance() {
         return MatchManagerApp.singleInstance;
     }
-
+    
     private final IniziarePartitaController inizPartCtrl;
-
+    
     private final RobotChooser robotChooser;
-
+    
     public IniziarePartitaController getIniziarePartitaController() {
         return this.inizPartCtrl;
     }
@@ -93,7 +95,10 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
         startMatchButton = new javax.swing.JButton();
         cancelMatchButton = new javax.swing.JButton();
         ongoingMatchPanel = new javax.swing.JPanel();
-        javax.swing.JLabel jLabel7 = new javax.swing.JLabel();
+        titolo = new javax.swing.JLabel();
+        tabellone = new javax.swing.JSplitPane();
+        controlActionPanel = new javax.swing.JPanel();
+        jSplitPane1 = new javax.swing.JSplitPane();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("RoboGP Match Manager");
@@ -321,11 +326,55 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
 
         getContentPane().add(playersPanel, "players");
 
-        ongoingMatchPanel.add(jLabel7);
+        ongoingMatchPanel.setMaximumSize(null);
+        ongoingMatchPanel.setMinimumSize(new java.awt.Dimension(852, 728));
+
+        titolo.setFont(new java.awt.Font("Tempus Sans ITC", 3, 48)); // NOI18N
+        titolo.setForeground(new java.awt.Color(0, 153, 51));
+        titolo.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        titolo.setText("Server RoboGP");
+
+        javax.swing.GroupLayout controlActionPanelLayout = new javax.swing.GroupLayout(controlActionPanel);
+        controlActionPanel.setLayout(controlActionPanelLayout);
+        controlActionPanelLayout.setHorizontalGroup(
+            controlActionPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 183, Short.MAX_VALUE)
+        );
+        controlActionPanelLayout.setVerticalGroup(
+            controlActionPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 594, Short.MAX_VALUE)
+        );
+
+        tabellone.setLeftComponent(controlActionPanel);
+        tabellone.setRightComponent(jSplitPane1);
+
+        javax.swing.GroupLayout ongoingMatchPanelLayout = new javax.swing.GroupLayout(ongoingMatchPanel);
+        ongoingMatchPanel.setLayout(ongoingMatchPanelLayout);
+        ongoingMatchPanelLayout.setHorizontalGroup(
+            ongoingMatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(ongoingMatchPanelLayout.createSequentialGroup()
+                .addGroup(ongoingMatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(ongoingMatchPanelLayout.createSequentialGroup()
+                        .addGap(96, 96, 96)
+                        .addComponent(titolo, javax.swing.GroupLayout.PREFERRED_SIZE, 697, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(ongoingMatchPanelLayout.createSequentialGroup()
+                        .addContainerGap()
+                        .addComponent(tabellone, javax.swing.GroupLayout.PREFERRED_SIZE, 812, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addGap(0, 30, Short.MAX_VALUE))
+        );
+        ongoingMatchPanelLayout.setVerticalGroup(
+            ongoingMatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, ongoingMatchPanelLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(titolo)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(tabellone, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(22, 22, 22))
+        );
 
         getContentPane().add(ongoingMatchPanel, "ongoing");
 
-        setBounds(0, 0, 737, 373);
+        setBounds(0, 0, 788, 455);
     }// </editor-fold>//GEN-END:initComponents
 
     private void initButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_initButtonActionPerformed
@@ -361,7 +410,7 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
                     + "Il massimo numero di robot nel gioco è " + Match.ROBOTSINGAME);
         }
         if (ok) {
-            this.rdView = new RobodromeView (new Robodrome ("robodromes\\" + rbdName + ".txt"), 45);
+            MatchManagerApp.rdView = new RobodromeView(new Robodrome("robodromes\\" + rbdName + ".txt"), 45);
             this.inizPartCtrl.creaPartita(rbdName, nPl, nRob, Match.EndGame.values()[endGameOpt], upgradeOpt);
             this.requestList.setModel(this.inizPartCtrl.getRequestList());
             ArrayList<RobotMarker> allRobots = Match.getInstance().getAllRobots();
@@ -418,34 +467,136 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
     private void startMatchButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_startMatchButtonActionPerformed
         this.inizPartCtrl.avviaPartita();
         ((CardLayout) this.getContentPane().getLayout()).show(this.getContentPane(), "ongoing");
-        ongoingMatchPanel.add (this.rdView);
+        //ongoingMatchPanel.add(this.rdView);
+        jSplitPane1.setRightComponent(rdView);
+        TOTALROBOTS = Match.getInstance().getRobotsPerPlayer() * Match.getInstance().getPlayerCount();
+        for (int i = 0; i < TOTALROBOTS; i++) {
+            RobotMarker rm = Match.getInstance().getAllRobots().get(i);
+            int[] coord = getFreeDock(i + 1);
+            rdView.placeRobot(rm, Direction.E, coord[0], coord[1], true);
+            rm.setX(coord[1]);
+            rm.setY(coord[0]);
+        }
     }//GEN-LAST:event_startMatchButtonActionPerformed
-
-    @Override
-    public void notifyMessageReceived(Message msg) {
-        System.out.println("***NEW Messaggio ricevuto: " + msg.getName());
-        if (msg.getName().equals(Match.MatchJoinRequestMsg)) {
-            String playerName = (String) msg.getParameter(0);
-            String keyWord = (String) msg.getParameter(1);
-            Connection c = msg.getSenderConnection();
-            Message reply = new Message(Match.MatchJoinReplyMsg);
-            if (this.inizPartCtrl.getServerAccessKey().equals(keyWord)) {
-                DefaultListModel lm = (DefaultListModel) this.requestList.getModel();
-                lm.addElement(playerName);
-                this.inizPartCtrl.accettaRichiesta(playerName, Match.getInstance().getAllRobots());
-                Object[] par = {true};
-                reply.setParameters(par);
-                try {
-                    c.sendMessage(reply);
-                } catch (PartnerShutDownException ex) {
-                    Logger.getLogger(MatchManagerApp.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            } else {
-                System.out.println("password di accesso sbagliata");
+    
+    public void executeCommands(Card[][] cards, int index) throws InterruptedException {
+        ArrayList<Card> comm = new ArrayList();
+        for (Card[] card : cards) {
+            if (card[index] != null) {
+                comm.add(card[index]);
             }
         }
+        comm = Card.getSortedList(comm);
+        for (int i = 0; i < comm.size(); i++) {
+            int ind = comm.get(i).getIdOwner();
+            switch (comm.get(i).getCommand()) {
+                case "turnL":
+                    turnL(Match.getInstance().getAllRobots().get(ind));
+                    break;
+                case "turnR":
+                    turnR(Match.getInstance().getAllRobots().get(ind));
+                    break;
+                case "Uturn":
+                    Uturn(Match.getInstance().getAllRobots().get(ind));
+                    break;
+                case "move1":
+                    move1(Match.getInstance().getAllRobots().get(ind));
+                    break;
+                case "move2":
+                    move2(Match.getInstance().getAllRobots().get(ind));
+                    break;
+                case "move3":
+                    move3(Match.getInstance().getAllRobots().get(ind));
+                    break;
+                case "backup":
+                    Uturn(Match.getInstance().getAllRobots().get(ind));
+                    break;
+            }
+            updateCheckPoint(Match.getInstance().getAllRobots().get(ind));
+        }
+        MatchManagerApp.rdView.play();
+        Thread.sleep(6000);
     }
-
+    
+    public void move3(RobotMarker robmar) {
+        int movement = checkMoreWalls(robmar.getX(), robmar.getY(), robmar.getDir(), true, robmar);
+        moveAndSetPosition(movement, robmar);
+        checkCell(robmar.getX(), robmar.getY(), robmar);
+        rdView.addPause(500);
+    }
+    
+    public void move2(RobotMarker robmar) {
+        int movement = checkMoreWalls(robmar.getX(), robmar.getY(), robmar.getDir(), false, robmar);
+        moveAndSetPosition(movement, robmar);
+        checkCell(robmar.getX(), robmar.getY(), robmar);
+        rdView.addPause(500);
+    }
+    
+    public void move1(RobotMarker robmar) {
+        if (checkWalls(robmar.getX(), robmar.getY(), robmar.getDir())) {    //se la strada è libera
+            moveAndSetPosition(1, robmar);
+            checkCell(robmar.getX(), robmar.getY(), robmar);
+        }
+        rdView.addPause(500);
+    }
+    
+    public void Uturn(RobotMarker robmar) {
+        rdView.addRobotMove(robmar, 0, robmar.getDir(), Rotation.CCW180);
+        switch (robmar.getDir()) {
+            case N:
+                robmar.setDir(Direction.S);
+                break;
+            case S:
+                robmar.setDir(Direction.N);
+                break;
+            case E:
+                robmar.setDir(Direction.W);
+                break;
+            case W:
+                robmar.setDir(Direction.E);
+                break;
+        }
+        rdView.addPause(500);
+    }
+    
+    public void turnL(RobotMarker robmar) {
+        rdView.addRobotMove(robmar, 0, robmar.getDir(), Rotation.CCW90);
+        switch (robmar.getDir()) {
+            case N:
+                robmar.setDir(Direction.W);
+                break;
+            case S:
+                robmar.setDir(Direction.E);
+                break;
+            case E:
+                robmar.setDir(Direction.N);
+                break;
+            case W:
+                robmar.setDir(Direction.S);
+                break;
+        }
+        rdView.addPause(500);
+    }
+    
+    public void turnR(RobotMarker robmar) {
+        rdView.addRobotMove(robmar, 0, robmar.getDir(), Rotation.CW90);
+        switch (robmar.getDir()) {
+            case N:
+                robmar.setDir(Direction.E);
+                break;
+            case S:
+                robmar.setDir(Direction.W);
+                break;
+            case E:
+                robmar.setDir(Direction.S);
+                break;
+            case W:
+                robmar.setDir(Direction.N);
+                break;
+        }
+        rdView.addPause(500);
+    }
+    
     public static void main(String args[]) {
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
@@ -459,15 +610,12 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
                     break;
                 }
             }
-        } catch (ClassNotFoundException ex) {
-            java.util.logging.Logger.getLogger(MatchManagerApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (InstantiationException ex) {
-            java.util.logging.Logger.getLogger(MatchManagerApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (IllegalAccessException ex) {
-            java.util.logging.Logger.getLogger(MatchManagerApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
+        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | javax.swing.UnsupportedLookAndFeelException ex) {
             java.util.logging.Logger.getLogger(MatchManagerApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         }
+        //</editor-fold>
+        //</editor-fold>
+        
         //</editor-fold>
         //</editor-fold>
 
@@ -481,10 +629,12 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton acceptRequestButton;
     private javax.swing.JButton cancelMatchButton;
+    private javax.swing.JPanel controlActionPanel;
     private javax.swing.JButton createButton;
     private javax.swing.JComboBox<String> endGameCombo;
     private javax.swing.JButton initButton;
     private javax.swing.JPanel initPanel;
+    private javax.swing.JSplitPane jSplitPane1;
     private javax.swing.JTextField keyField;
     private javax.swing.JPanel matchPanel;
     private javax.swing.JComboBox<String> maxPlayersCombo;
@@ -497,6 +647,8 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
     private javax.swing.JComboBox<String> robodromeCombo;
     private javax.swing.JPanel robotRecapPanel;
     private javax.swing.JButton startMatchButton;
+    private javax.swing.JSplitPane tabellone;
+    private javax.swing.JLabel titolo;
     private javax.swing.JCheckBox upgradeCheck;
     // End of variables declaration//GEN-END:variables
 
@@ -508,5 +660,255 @@ public class MatchManagerApp extends javax.swing.JFrame implements MessageObserv
             opts[i] = robodromeFiles[i].getName().split("\\.")[0];
         }
         this.robodromeCombo.setModel(new DefaultComboBoxModel<>(opts));
+    }
+    
+    public void checkCell(int x, int y, RobotMarker robmar) {
+        System.out.println("x: " + x + "   y: " + y + "  direzione " + robmar.getDir());
+        BoardCell cell = Match.getInstance().getTheRobodrome().getCell(y, x);
+        if (cell instanceof BeltCell) {
+            BeltCell belt = (BeltCell) cell;
+            rdView.addRobotMove(robmar, 1, belt.getOutputDirection(), Rotation.NO);
+            if (belt.getOutputDirection() != null) {
+                switch (belt.getOutputDirection()) {
+                    case S:
+                        robmar.setY(robmar.getY() + 1);
+                        checkCell(x, y + 1, robmar);
+                        break;
+                    case N:
+                        robmar.setY(robmar.getY() - 1);
+                        checkCell(x, y - 1, robmar);
+                        break;
+                    case E:
+                        robmar.setX(robmar.getX() + 1);
+                        checkCell(x + 1, y, robmar);
+                        break;
+                    case W:
+                        robmar.setX(robmar.getX() - 1);
+                        checkCell(x - 1, y, robmar);
+                        break;
+                }
+            }
+        } else if (cell instanceof PitCell) {
+            rdView.addRobotFall(robmar);
+            robmar.setX(0);
+            robmar.setY(5);
+        }
+    }
+    
+    public void moveAndSetPosition(int movement, RobotMarker robmar) {
+        int x, y;
+        if (null != robmar.getDir()) {
+            switch (robmar.getDir()) {
+                case S:
+                    y = getRightY(robmar.getY(), false, movement);
+                    //  change = (robmar.getY() + movement) >= robodrome.getRowCount();
+                    robmar.setY(y);
+                    rdView.addRobotMove(robmar, movement, robmar.getDir(), Rotation.NO);
+                    break;
+                
+                case N:
+                    y = getRightY(robmar.getY(), true, movement);
+                    robmar.setY(y);
+                    rdView.addRobotMove(robmar, movement, robmar.getDir(), Rotation.NO);
+                    break;
+                
+                case E:
+                    x = getRightX(robmar.getX(), false, movement);
+                    robmar.setX(x);
+                    rdView.addRobotMove(robmar, movement, robmar.getDir(), Rotation.NO);
+                    break;
+                
+                case W:
+                    x = getRightX(robmar.getX(), true, movement);
+                    robmar.setX(x);
+                    rdView.addRobotMove(robmar, movement, robmar.getDir(), Rotation.NO);
+                    break;
+            }
+        }
+    }
+
+    /*restituisce il numero di celle che il robot può percorrere
+    se moveThree è false portanno esserci solo 2 celle al massimo*/
+    public int checkMoreWalls(int x, int y, Direction dir, boolean moveThree, RobotMarker robmar) {
+        int realX, realY;
+        if (!checkWalls(x, y, dir)) {
+            return 0;
+        } else if (dir != null) {
+            switch (dir) {
+                case S:
+                    realY = getRightY(robmar.getY(), false, 1);
+                    if (!checkWalls(robmar.getX(), realY, Direction.S)) {
+                        return 1;
+                    }
+                    break;
+                case N:
+                    realY = getRightY(robmar.getY(), true, 1);
+                    if (!checkWalls(robmar.getX(), realY, Direction.N)) {
+                        return 1;
+                    }
+                    break;
+                case E:
+                    realX = getRightX(robmar.getX(), false, 1);
+                    if (!checkWalls(realX, robmar.getY(), Direction.E)) {
+                        return 1;
+                    }
+                    break;
+                case W:
+                    realX = getRightX(robmar.getX(), true, 1);
+                    if (!checkWalls(realX, robmar.getY(), Direction.W)) {
+                        return 1;
+                    }
+                    break;
+            }
+        }
+        if (moveThree) {
+            switch (robmar.getDir()) {
+                case S:
+                    realY = getRightY(robmar.getY(), false, 2);
+                    if (!checkWalls(robmar.getX(), realY, Direction.S)) {
+                        return 2;
+                    }
+                    break;
+                case N:
+                    realY = getRightY(robmar.getY(), true, 2);
+                    if (!checkWalls(robmar.getX(), realY, Direction.N)) {
+                        return 2;
+                    }
+                    break;
+                case E:
+                    realX = getRightX(robmar.getX(), false, 2);
+                    if (!checkWalls(realX, robmar.getY(), Direction.E)) {
+                        return 2;
+                    }
+                    break;
+                case W:
+                    realX = getRightX(robmar.getX(), true, 2);
+                    if (!checkWalls(realX, robmar.getY(), Direction.W)) {
+                        return 2;
+                    }
+            }
+            return 3;
+        } else {
+            return 2;
+        }
+        
+    }
+
+    /*ritorna false se la cella ha un muro nella posixione indicata,
+    true se non ci sono ostacoli               */
+    private boolean checkWalls(int x, int y, Direction dir) {
+        if (Match.getInstance().getTheRobodrome().getCell(y, x) instanceof FloorCell) {
+            FloorCell floor = (FloorCell) Match.getInstance().getTheRobodrome().getCell(y, x);
+            FloorCell nextFloor;
+            int rightX, rightY;
+            switch (dir) {
+                case N:
+                    rightY = getRightY(y, true, 1);
+                    if (Match.getInstance().getTheRobodrome().getCell(rightY, x) instanceof FloorCell) {
+                        nextFloor = (FloorCell) Match.getInstance().getTheRobodrome().getCell(rightY, x);
+                        return !floor.hasWall(dir) && !nextFloor.hasWall(Direction.S);
+                    }
+                    break;
+                case S:
+                    rightY = getRightY(y, false, 1);
+                    if (Match.getInstance().getTheRobodrome().getCell(rightY, x) instanceof FloorCell) {
+                        nextFloor = (FloorCell) Match.getInstance().getTheRobodrome().getCell(rightY, x);
+                        return !floor.hasWall(dir) && !nextFloor.hasWall(Direction.N);
+                    }
+                    break;
+                case E:
+                    rightX = getRightX(x, false, 1);
+                    if (Match.getInstance().getTheRobodrome().getCell(y, rightX) instanceof FloorCell) {
+                        nextFloor = (FloorCell) Match.getInstance().getTheRobodrome().getCell(y, rightX);
+                        return !floor.hasWall(dir) && !nextFloor.hasWall(Direction.W);
+                    }
+                    break;
+                case W:
+                    rightX = getRightX(x, true, 1);
+                    if (Match.getInstance().getTheRobodrome().getCell(y, rightX) instanceof FloorCell) {
+                        nextFloor = (FloorCell) Match.getInstance().getTheRobodrome().getCell(y, rightX);
+                        return !floor.hasWall(dir) && !nextFloor.hasWall(Direction.E);
+                    }
+                    break;
+            }
+            return !floor.hasWall(dir);
+        } else {
+            return true;
+        }
+    }
+
+    /* restituisce il giusto posizionamento sull'asse X. Da usare per controllare 
+        che il robot si muova all'interno dei limiti del robodrommo */
+    private int getRightX(int x, boolean westDir, int movement) {
+        if (westDir) {
+            if (x - movement < 0) {
+                return x - movement + Match.getInstance().getTheRobodrome().getColumnCount();
+            } else {
+                return x - movement;
+            }
+        } else {
+            if (x >= Match.getInstance().getTheRobodrome().getColumnCount()) {
+                return (x + movement) % Match.getInstance().getTheRobodrome().getColumnCount();
+            } else {
+                return x + movement;
+            }
+        }
+    }
+    
+    private int getRightY(int y, boolean northDir, int movement) {
+        if (northDir) {
+            if (y - movement < 0) {
+                return y - movement + Match.getInstance().getTheRobodrome().getRowCount();
+            } else {
+                return y - movement;
+            }
+        } else {
+            if (y + movement >= Match.getInstance().getTheRobodrome().getRowCount()) {
+                return (y + movement) % Match.getInstance().getTheRobodrome().getRowCount();
+            } else {
+                return y + movement;
+            }
+        }
+    }
+    
+    private RobotMarker robotInPath(RobotMarker moved, int x, int y) {
+        for (RobotMarker rm : Match.getInstance().getAllRobots()) {
+            if (rm != null && !rm.equals(moved)) {
+                if (rm.getX() == x && rm.getY() == y) {
+                    move1(rm);
+                    return rm;
+                }
+            }
+        }
+        return null;
+    }
+    
+    private int[] getFreeDock(int dock) {
+        int[] res = new int[2];
+        for (int row = 0; row < Match.getInstance().getTheRobodrome().getRowCount(); row++) {
+            for (int col = 0; col < Match.getInstance().getTheRobodrome().getColumnCount(); col++) {
+                BoardCell bc = Match.getInstance().getTheRobodrome().getCell(row, col);
+                if (bc instanceof FloorCell) {
+                    FloorCell fc = (FloorCell) bc;
+                    if (fc.getDock() == dock) {
+                        res[0] = row;
+                        res[1] = col;
+                        System.out.println("y :" + row + "  x :" + col);
+                        return res;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    private void updateCheckPoint(RobotMarker rm) {
+        BoardCell cell = Match.getInstance().getTheRobodrome().getCell(rm.getY(), rm.getX());
+        if (cell instanceof FloorCell) {
+            FloorCell fCell = (FloorCell) cell;
+            if (fCell.getCheckpoint() == rm.getnCheckPoint() + 1) {
+                rm.setnCheckPoint(fCell.getCheckpoint());
+            }
+        }
     }
 }

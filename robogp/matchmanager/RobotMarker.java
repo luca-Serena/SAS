@@ -24,11 +24,14 @@ public class RobotMarker implements Serializable {
     private Direction dir;
     private int X;
     private int Y;
+    private int nCheckPoint;
 
     public RobotMarker(String name, String color) {
         this.name = name;
         this.color = color;
         this.dockNumber = 0;
+        this.dir = Direction.E;
+        this.nCheckPoint=0;
     }
 
     public BufferedImage getImage(int size) {
@@ -57,6 +60,16 @@ public class RobotMarker implements Serializable {
         return color;
     }
 
+    public int getnCheckPoint() {
+        return nCheckPoint;
+    }
+
+    public void setnCheckPoint(int nCheckPoint) {
+        this.nCheckPoint = nCheckPoint;
+    }
+
+    
+    
     public boolean isAssigned() {
         return (this.dockNumber > 0);
     }

@@ -1,10 +1,12 @@
 package robogp.matchmanager;
 
+import Match.Card;
 import connection.Connection;
 import connection.Message;
 import connection.MessageObserver;
 import connection.PartnerShutDownException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Level;
@@ -23,6 +25,9 @@ public class Match implements MessageObserver {
     public static final String MatchStartMsg = "startMatch";
     public static final String MatchCancelMsg = "cancelMatch";
     public static final String MatchCommands = "commands";
+    public static final String AvailableMessage = "available";
+    public static final String MatchView = "MatchView";
+    private Card[][] instructions;
 
     public enum EndGame {
         First, First3, AllButLast
@@ -33,7 +38,7 @@ public class Match implements MessageObserver {
     };
 
     private static final String[] ROBOT_COLORS = {"blue", "red", "yellow", "emerald", "violet", "orange", "turquoise", "green"};
-    private static final String[] ROBOT_NAMES = {"robot-blue", "robot-red", "robot-yellow", "robot-emerald", "robot-violet", "robot-orange", "robot-turquoise", "robot-green"};
+    public static final String[] ROBOT_NAMES = {"robot-blue", "robot-red", "robot-yellow", "robot-emerald", "robot-violet", "robot-orange", "robot-turquoise", "robot-green"};
     private final Robodrome theRobodrome;
     private final RobotMarker[] robots;
     private final EndGame endGameCondition;
@@ -41,6 +46,7 @@ public class Match implements MessageObserver {
     private final int nRobotsXPlayer;
     private final boolean initUpgrades;
     private State status;
+    int idToAssign = 0;
 
     private final HashMap<String, Connection> waiting;
     private final HashMap<String, Connection> players;
@@ -62,6 +68,11 @@ public class Match implements MessageObserver {
         waiting = new HashMap<>();
         players = new HashMap<>();
         this.status = State.Created;
+        this.instructions = new Card[8][5];
+    }
+
+    public Robodrome getTheRobodrome() {
+        return theRobodrome;
     }
 
     public static Match getInstance(String rbdName, int nMaxPlayers,
@@ -85,6 +96,26 @@ public class Match implements MessageObserver {
             String nickName = (String) msg.getParameter(0);
             this.waiting.put(nickName, msg.getSenderConnection());
             MatchManagerApp.getAppInstance().getIniziarePartitaController().matchJoinRequestArrived(msg);
+        } else if (msg.getName().equals(Match.MatchCommands)) {
+            Card[] istr = (Card[]) msg.getParameter(0);
+            instructions[istr[0].getIdOwner()] = istr;
+            boolean ok = true;
+            for (int i = 0; i < getPlayerCount(); i++) {
+                if (instructions[i][0] == null) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                for (int i = 0; i < 5; i++) {
+                    try {
+                        MatchManagerApp.getAppInstance().executeCommands(instructions, i);
+                    } catch (InterruptedException ex) {
+                        Logger.getLogger(Match.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                }
+                informRoundEnded();
+            }
         }
     }
 
@@ -96,9 +127,9 @@ public class Match implements MessageObserver {
         this.status = State.Canceled;
 
         Message msg = new Message(Match.MatchCancelMsg);
-        for (String nickname : waiting.keySet()) {
+        waiting.keySet().forEach((nickname) -> {
             this.refusePlayer(nickname);
-        }
+        });
 
         players.values().stream().forEach((conn) -> {
             try {
@@ -139,9 +170,7 @@ public class Match implements MessageObserver {
 
     public ArrayList<RobotMarker> getAllRobots() {
         ArrayList<RobotMarker> ret = new ArrayList<>();
-        for (RobotMarker m : this.robots) {
-            ret.add(m);
-        }
+        ret.addAll(Arrays.asList(this.robots));
         return ret;
     }
 
@@ -156,7 +185,7 @@ public class Match implements MessageObserver {
 
             Message reply = new Message(Match.MatchJoinReplyMsg);
             Object[] parameters = new Object[1];
-            parameters[0] = new Boolean(false);
+            parameters[0] = false;
             reply.setParameters(parameters);
 
             conn.sendMessage(reply);
@@ -170,17 +199,17 @@ public class Match implements MessageObserver {
     public boolean addPlayer(String nickname, List<RobotMarker> selection) {
         boolean added = false;
         try {
-            for (RobotMarker rob : selection) {
+            selection.forEach((rob) -> {
                 int dock = this.getFreeDock();
                 rob.assign(nickname, dock);
-            }
+            });
 
             Connection conn = this.waiting.get(nickname);
-
             Message reply = new Message(Match.MatchJoinReplyMsg);
-            Object[] parameters = new Object[2];
-            parameters[0] = new Boolean(true);
+            Object[] parameters = new Object[3];
+            parameters[0] = true;
             parameters[1] = selection.toArray(new RobotMarker[selection.size()]);
+            parameters[2] = idToAssign++;
             reply.setParameters(parameters);
 
             conn.sendMessage(reply);
@@ -218,5 +247,17 @@ public class Match implements MessageObserver {
 
     public int getMaxPlayers() {
         return this.nMaxPlayers;
+    }
+    
+    private void informRoundEnded(){
+     players.values().stream().forEach((conn) -> {
+            try {
+                Message msg = new Message(AvailableMessage);
+                conn.sendMessage(msg);
+                this.instructions = new Card[8][5];
+            } catch (PartnerShutDownException ex) {
+                Logger.getLogger(Match.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        });
     }
 }
