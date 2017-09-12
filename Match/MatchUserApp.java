@@ -1,70 +1,48 @@
 package Match;
 
-import Training.ButtonColumn;
+import static Match.Card.getRandomPool;
 import connection.Connection;
 import connection.Message;
+import connection.MessageObserver;
 import connection.PartnerShutDownException;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
+import java.io.IOException;
+import java.net.InetAddress;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import robogp.matchmanager.Match;
+import robogp.matchmanager.MatchManagerApp;
 import robogp.matchmanager.RobotMarker;
-import robogp.robodrome.*;
 import robogp.robodrome.view.RobodromeView;
 
-public class MatchUserApp extends javax.swing.JFrame {
+public class MatchUserApp extends javax.swing.JFrame implements MessageObserver {
 
+    Card[] instructions = new Card[5];
+    Card[] cardpool;
+    int contcard = 0;
+    private static MatchUserApp singleInstance;
     JTable table;
     DefaultTableModel model;
     JButton prova = new JButton("prova");
-    static RobodromeView rdview;
-    RobotMarker robmar;
-    Robodrome robodrome;
     Connection serverConn;
     boolean available;
+    RobodromeView view;
+    int idUser;
 
-    //immagini caricate e scalate
-    ImageIcon backupimg = new ImageIcon(new ImageIcon("tiles/card-backup.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon move1img = new ImageIcon(new ImageIcon("tiles/card-move1.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon move2img = new ImageIcon(new ImageIcon("tiles/card-move2.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon move3img = new ImageIcon(new ImageIcon("tiles/card-move3.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon turnlimg = new ImageIcon(new ImageIcon("tiles/card-turnL.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon turnrimg = new ImageIcon(new ImageIcon("tiles/card-turnR.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon uturnimg = new ImageIcon(new ImageIcon("tiles/card-uturn.png").getImage().getScaledInstance(50, 50, Image.SCALE_DEFAULT));
-    ImageIcon rotate90img = new ImageIcon(new ImageIcon("tiles/rotate90.png").getImage().getScaledInstance(30, 30, Image.SCALE_DEFAULT));
-
-    public MatchUserApp(Robodrome rd, RobotMarker rm, int numcell, RobodromeView rdview) {
+    public MatchUserApp() {
         initComponents();
-        tabellone.setRightComponent(rdview);
         tabellone.setVisible(true);
-        this.robodrome = rd;
-        robmar = rm;
-
-        robmar.setX(0);
-        robmar.setY(5);
-
         getContentPane().setBackground(new Color(204, 255, 209));
         controlActionPanel.setBackground(new Color(255, 204, 229));
         leftPanel.setBackground(new Color(204, 255, 209));
 
         //inserimento immagini e pulsanti relativi alle schede base
-        backup.setIcon(backupimg);
-        move1.setIcon(move1img);
-        move2.setIcon(move2img);
-        move3.setIcon(move3img);
-        turnl.setIcon(turnlimg);
-        turnr.setIcon(turnrimg);
-        uturn.setIcon(uturnimg);
-
-        String[] columnNames = {"       Set Card", "        Delete"};
-        Object[][] data
-                = {};
+        String[] columnNames = {" Set Card"};
+        Object[][] data = {};
 
         model = new DefaultTableModel(data, columnNames);
         table = new JTable(model) {
@@ -86,8 +64,6 @@ public class MatchUserApp extends javax.swing.JFrame {
             }
         };
 
-        ButtonColumn buttonColumn = new ButtonColumn(table, delete, 1);
-        buttonColumn.setMnemonic(KeyEvent.VK_D);
         table.setPreferredScrollableViewportSize(table.getPreferredSize());
 
         //inserisco la tabella nello scrollpanel
@@ -97,42 +73,74 @@ public class MatchUserApp extends javax.swing.JFrame {
         table.setRowHeight(60);
     }
 
-    private void sendIstr(String istr) {
-        Message msg = new Message(Match.MatchCommands);
-        Object[] pars = new Object[1];
-        pars[0] = istr;
-        msg.setParameters(pars);
-        try {
-            serverConn.sendMessage(msg);
-        } catch (PartnerShutDownException ex) {
-            Logger.getLogger(MatchUserApp.class.getName()).log(Level.SEVERE, null, ex);
+    @Override
+    public void notifyMessageReceived(Message msg) {
+        System.out.println("***NEW Messaggio ricevuto:" + msg.getName());
+        if (msg.getName().equals(Match.MatchJoinReplyMsg)) {
+            boolean reply = (Boolean) msg.getParameter(0);
+            System.out.println("\tRisposta: " + (reply ? "Accettato" : "Rifiutato"));
+            if (reply) {
+                RobotMarker[] robots = (RobotMarker[]) msg.getParameter(1);
+                for (RobotMarker r : robots) {
+                    System.out.println("\tRobot assegnato: " + r.getName() + " al dock " + r.getDock());
+                }
+                ((CardLayout) this.getContentPane().getLayout()).show(this.getContentPane(), "matchpanel");
+                this.view=getRobodromeView();
+                tabellone.setRightComponent(view);
+                tabellone.setVisible(true);
+                this.idUser = (Integer) msg.getParameter(2);
+
+                setCards();
+            }
+        } else if (msg.getName().equals(Match.AvailableMessage)) {
+            setCards();
+            this.view=getRobodromeView();
+            tabellone.setRightComponent(view);
+        }
+        else if (msg.getName().equals(Match.MatchView)){
+       //     this.rdView = (RobodromeView) msg.getParameter(0);
         }
     }
 
-    class addButtonPlayListener implements ActionListener {
-
-        @Override
-        public void actionPerformed(ActionEvent ae) {
-
-            rdview.play();
-        }
+    private void setCards() {
+        cardpool = getRandomPool(9);
+        card1.setIcon(cardpool[0].getImage());
+        card1.setEnabled(true);
+        card2.setIcon(cardpool[1].getImage());
+        card2.setEnabled(true);
+        card3.setIcon(cardpool[2].getImage());
+        card3.setEnabled(true);
+        card4.setIcon(cardpool[3].getImage());
+        card4.setEnabled(true);
+        card5.setIcon(cardpool[4].getImage());
+        card5.setEnabled(true);
+        card6.setIcon(cardpool[5].getImage());
+        card6.setEnabled(true);
+        card7.setIcon(cardpool[6].getImage());
+        card7.setEnabled(true);
+        card8.setIcon(cardpool[7].getImage());
+        card8.setEnabled(true);
+        card9.setIcon(cardpool[8].getImage());
+        card9.setEnabled(true);
+        model.setRowCount(0);
     }
 
-    class addButtonPauseListener implements ActionListener {
-
-        @Override
-        public void actionPerformed(ActionEvent ae) {
-
-            rdview.addPause(3000);
-        }
-    }
-
-    class addButtonRotateButtonListener implements ActionListener {
-
-        @Override
-        public void actionPerformed(ActionEvent ae) {
-            rdview.addRobotMove(robmar, 0, Direction.E, Rotation.CW90);
-            sendIstr("rotate");
+    private void sendIstr() {
+        if (this.instructions.length > 0) {
+            Message msg = new Message(Match.MatchCommands);
+            for (Card c : this.instructions) {
+                if (c != null) {
+                    c.setIdOwner(this.idUser);
+                }
+            }
+            Object[] pars = new Object[1];
+            pars[0] = instructions;
+            msg.setParameters(pars);
+            try {
+                serverConn.sendMessage(msg);
+            } catch (PartnerShutDownException ex) {
+                Logger.getLogger(MatchUserApp.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
     }
 
@@ -159,7 +167,7 @@ public class MatchUserApp extends javax.swing.JFrame {
     }
 
     public static RobodromeView getRobodromeView() {
-        return rdview;
+        return MatchManagerApp.rdView;
     }
 
     @SuppressWarnings("unchecked")
@@ -167,286 +175,440 @@ public class MatchUserApp extends javax.swing.JFrame {
     private void initComponents() {
 
         jScrollPane3 = new javax.swing.JScrollPane();
-        titolo = new javax.swing.JLabel();
+        RequestSender = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
-        scrollCardPanel = new javax.swing.JScrollPane();
-        leftPanel = new javax.swing.JPanel();
-        backup = new javax.swing.JButton();
-        move1 = new javax.swing.JButton();
-        move2 = new javax.swing.JButton();
-        move3 = new javax.swing.JButton();
+        nameArea = new javax.swing.JTextArea();
         jLabel1 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
-        jLabel3 = new javax.swing.JLabel();
-        jLabel4 = new javax.swing.JLabel();
-        turnl = new javax.swing.JButton();
-        turnr = new javax.swing.JButton();
-        uturn = new javax.swing.JButton();
-        jLabel5 = new javax.swing.JLabel();
-        jLabel6 = new javax.swing.JLabel();
-        jLabel7 = new javax.swing.JLabel();
-        jLabel8 = new javax.swing.JLabel();
+        jScrollPane2 = new javax.swing.JScrollPane();
+        passwordText = new javax.swing.JTextArea();
+        jButton1 = new javax.swing.JButton();
+        MatchPanel = new javax.swing.JPanel();
+        jLabel16 = new javax.swing.JLabel();
+        titolo = new javax.swing.JLabel();
+        leftPanel = new javax.swing.JPanel();
+        jLabel15 = new javax.swing.JLabel();
+        card2 = new javax.swing.JButton();
+        card1 = new javax.swing.JButton();
+        card3 = new javax.swing.JButton();
+        card4 = new javax.swing.JButton();
+        card5 = new javax.swing.JButton();
+        card6 = new javax.swing.JButton();
+        card7 = new javax.swing.JButton();
+        card8 = new javax.swing.JButton();
+        card9 = new javax.swing.JButton();
+        jScrollPane4 = new javax.swing.JScrollPane();
+        scrollCardPanel = new javax.swing.JScrollPane();
         tabellone = new javax.swing.JSplitPane();
         controlActionPanel = new javax.swing.JPanel();
-        jLabel9 = new javax.swing.JLabel();
+        play = new java.awt.Button();
+        checkPoint = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("TrainingApp");
         setBackground(new java.awt.Color(204, 255, 204));
         setName("mainFrame"); // NOI18N
+        getContentPane().setLayout(new java.awt.CardLayout());
+
+        nameArea.setColumns(20);
+        nameArea.setRows(5);
+        jScrollPane1.setViewportView(nameArea);
+
+        jLabel1.setText("Inserisci il nome dell'utente");
+
+        jLabel2.setText("Inserisci la password per accedere");
+
+        passwordText.setColumns(20);
+        passwordText.setRows(5);
+        jScrollPane2.setViewportView(passwordText);
+
+        jButton1.setText("Invia richiesta");
+        jButton1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton1ActionPerformed(evt);
+            }
+        });
+
+        javax.swing.GroupLayout RequestSenderLayout = new javax.swing.GroupLayout(RequestSender);
+        RequestSender.setLayout(RequestSenderLayout);
+        RequestSenderLayout.setHorizontalGroup(
+            RequestSenderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, RequestSenderLayout.createSequentialGroup()
+                .addGap(0, 522, Short.MAX_VALUE)
+                .addGroup(RequestSenderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, RequestSenderLayout.createSequentialGroup()
+                        .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 208, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(504, 504, 504))
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, RequestSenderLayout.createSequentialGroup()
+                        .addGroup(RequestSenderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                            .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 256, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 256, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(481, 481, 481))))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, RequestSenderLayout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel1)
+                .addGap(541, 541, 541))
+            .addGroup(RequestSenderLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jButton1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addGap(46, 46, 46))
+        );
+        RequestSenderLayout.setVerticalGroup(
+            RequestSenderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(RequestSenderLayout.createSequentialGroup()
+                .addGap(112, 112, 112)
+                .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 38, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(27, 27, 27)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 44, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(47, 47, 47)
+                .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 27, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(41, 41, 41)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 47, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 272, Short.MAX_VALUE)
+                .addComponent(jButton1)
+                .addGap(165, 165, 165))
+        );
+
+        getContentPane().add(RequestSender, "card2");
+        RequestSender.getAccessibleContext().setAccessibleName("RequestSender");
+
+        jLabel16.setFont(new java.awt.Font("Tempus Sans ITC", 0, 18)); // NOI18N
+        jLabel16.setText("Istruzioni in coda:");
 
         titolo.setFont(new java.awt.Font("Tempus Sans ITC", 3, 48)); // NOI18N
         titolo.setForeground(new java.awt.Color(0, 153, 51));
         titolo.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
-        titolo.setText("Partita RoboGP");
+        titolo.setText("Match RoboGP");
 
-        jScrollPane1.setViewportView(scrollCardPanel);
+        jLabel15.setFont(new java.awt.Font("Tempus Sans ITC", 0, 18)); // NOI18N
+        jLabel15.setText("Schede:");
 
-        backup.setMaximumSize(null);
-        backup.setMinimumSize(null);
-        backup.setName(""); // NOI18N
-        backup.setPreferredSize(null);
-        backup.addActionListener(new java.awt.event.ActionListener() {
+        card2.setText("Card2");
+        card2.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                backupActionPerformed(evt);
+                card2ActionPerformed(evt);
             }
         });
 
-        move1.addActionListener(new java.awt.event.ActionListener() {
+        card1.setText("Card1");
+        card1.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                move1ActionPerformed(evt);
+                card1ActionPerformed(evt);
             }
         });
 
-        move2.addActionListener(new java.awt.event.ActionListener() {
+        card3.setText("Card3");
+        card3.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                move2ActionPerformed(evt);
+                card3ActionPerformed(evt);
             }
         });
 
-        move3.addActionListener(new java.awt.event.ActionListener() {
+        card4.setText("Card4");
+        card4.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                move3ActionPerformed(evt);
+                card4ActionPerformed(evt);
             }
         });
 
-        jLabel1.setText("Backup");
-
-        jLabel2.setText("Move1");
-
-        jLabel3.setText("Move2");
-
-        jLabel4.setText("Move3");
-
-        turnl.addActionListener(new java.awt.event.ActionListener() {
+        card5.setText("Card5");
+        card5.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                turnlActionPerformed(evt);
+                card5ActionPerformed(evt);
             }
         });
 
-        turnr.addActionListener(new java.awt.event.ActionListener() {
+        card6.setText("Card6");
+        card6.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                turnrActionPerformed(evt);
+                card6ActionPerformed(evt);
             }
         });
 
-        uturn.addActionListener(new java.awt.event.ActionListener() {
+        card7.setText("Card7");
+        card7.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                uturnActionPerformed(evt);
+                card7ActionPerformed(evt);
             }
         });
 
-        jLabel5.setText("TurnL");
+        card8.setText("Card8");
+        card8.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                card8ActionPerformed(evt);
+            }
+        });
 
-        jLabel6.setText("TurnR");
-
-        jLabel7.setText("Uturn");
-
-        jLabel8.setFont(new java.awt.Font("Tempus Sans ITC", 0, 18)); // NOI18N
-        jLabel8.setText("Schede Base:");
+        card9.setText("Card9");
+        card9.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                card9ActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout leftPanelLayout = new javax.swing.GroupLayout(leftPanel);
         leftPanel.setLayout(leftPanelLayout);
         leftPanelLayout.setHorizontalGroup(
             leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
-                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addGap(43, 43, 43)
-                        .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(move2, javax.swing.GroupLayout.PREFERRED_SIZE, 83, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(turnl, javax.swing.GroupLayout.PREFERRED_SIZE, 83, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(backup, javax.swing.GroupLayout.PREFERRED_SIZE, 78, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addGap(0, 0, Short.MAX_VALUE))
-                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
-                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(jLabel1)
-                        .addGap(27, 27, 27)))
-                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addGap(65, 65, 65)
-                        .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(move3, javax.swing.GroupLayout.PREFERRED_SIZE, 76, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(turnr, javax.swing.GroupLayout.PREFERRED_SIZE, 76, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(move1, javax.swing.GroupLayout.PREFERRED_SIZE, 76, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addGap(53, 53, 53))
-                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
-                        .addComponent(jLabel2)
-                        .addGap(75, 75, 75))))
             .addGroup(leftPanelLayout.createSequentialGroup()
+                .addContainerGap()
                 .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addGap(117, 117, 117)
-                        .addComponent(uturn, javax.swing.GroupLayout.PREFERRED_SIZE, 83, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addGap(70, 70, 70)
-                        .addComponent(jLabel5)))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(jLabel6)
-                .addGap(77, 77, 77))
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(jLabel3)
-                .addGap(115, 115, 115)
-                .addComponent(jLabel4)
-                .addGap(75, 75, 75))
-            .addGroup(leftPanelLayout.createSequentialGroup()
-                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addGap(147, 147, 147)
-                        .addComponent(jLabel7))
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addGap(114, 114, 114)
-                        .addComponent(jLabel8)))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                        .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(leftPanelLayout.createSequentialGroup()
+                                .addComponent(card1, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 27, Short.MAX_VALUE)
+                                .addComponent(card2, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addGroup(leftPanelLayout.createSequentialGroup()
+                                .addComponent(card3, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(card4, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
+                                .addComponent(card5, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(card6, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addGroup(leftPanelLayout.createSequentialGroup()
+                                .addComponent(card7, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(card8, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addContainerGap())
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
+                        .addGap(0, 0, Short.MAX_VALUE)
+                        .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
+                                .addComponent(jLabel15)
+                                .addGap(74, 74, 74))
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, leftPanelLayout.createSequentialGroup()
+                                .addComponent(card9, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addGap(65, 65, 65))))))
         );
         leftPanelLayout.setVerticalGroup(
             leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(leftPanelLayout.createSequentialGroup()
-                .addGap(171, 171, 171)
-                .addComponent(jLabel8)
-                .addGap(31, 31, 31)
-                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                    .addComponent(move1, javax.swing.GroupLayout.DEFAULT_SIZE, 70, Short.MAX_VALUE)
-                    .addComponent(backup, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jLabel15)
+                .addGap(29, 29, 29)
                 .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel2)
-                    .addComponent(jLabel1))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addComponent(move3, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jLabel4)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(turnr, javax.swing.GroupLayout.PREFERRED_SIZE, 70, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addGroup(leftPanelLayout.createSequentialGroup()
-                        .addComponent(move2, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jLabel3)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(turnl, javax.swing.GroupLayout.PREFERRED_SIZE, 69, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                    .addComponent(card1, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(card2, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(32, 32, 32)
                 .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel5)
-                    .addComponent(jLabel6))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 7, Short.MAX_VALUE)
-                .addComponent(uturn, javax.swing.GroupLayout.PREFERRED_SIZE, 72, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jLabel7)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addComponent(card3, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(card4, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(41, 41, 41)
+                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(card5, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(card6, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(45, 45, 45)
+                .addGroup(leftPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(card7, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(card8, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(18, 18, 18)
+                .addComponent(card9, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(30, Short.MAX_VALUE))
         );
 
-        uturn.getAccessibleContext().setAccessibleName("uturn");
-        jLabel5.getAccessibleContext().setAccessibleName("turnl");
-        jLabel6.getAccessibleContext().setAccessibleName("turnr");
+        card2.getAccessibleContext().setAccessibleName("2");
+        card1.getAccessibleContext().setAccessibleName("card1");
+        card3.getAccessibleContext().setAccessibleName("3");
+        card4.getAccessibleContext().setAccessibleName("4");
+        card5.getAccessibleContext().setAccessibleName("5");
+        card6.getAccessibleContext().setAccessibleName("6");
+        card7.getAccessibleContext().setAccessibleName("7");
+        card8.getAccessibleContext().setAccessibleName("8");
+        card9.getAccessibleContext().setAccessibleName("9");
+
+        jScrollPane4.setViewportView(scrollCardPanel);
+
+        play.setFont(new java.awt.Font("Segoe Script", 0, 18)); // NOI18N
+        play.setLabel("RUN");
+        play.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                playActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout controlActionPanelLayout = new javax.swing.GroupLayout(controlActionPanel);
         controlActionPanel.setLayout(controlActionPanelLayout);
         controlActionPanelLayout.setHorizontalGroup(
             controlActionPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 100, Short.MAX_VALUE)
+            .addGroup(controlActionPanelLayout.createSequentialGroup()
+                .addGap(53, 53, 53)
+                .addComponent(play, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(69, Short.MAX_VALUE))
         );
         controlActionPanelLayout.setVerticalGroup(
             controlActionPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 594, Short.MAX_VALUE)
+            .addGroup(controlActionPanelLayout.createSequentialGroup()
+                .addGap(249, 249, 249)
+                .addComponent(play, javax.swing.GroupLayout.PREFERRED_SIZE, 58, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(287, Short.MAX_VALUE))
         );
 
         tabellone.setLeftComponent(controlActionPanel);
 
-        jLabel9.setFont(new java.awt.Font("Tempus Sans ITC", 0, 18)); // NOI18N
-        jLabel9.setText("Istruzioni in coda:");
+        checkPoint.setText("checkpoint : 0");
 
-        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
-        getContentPane().setLayout(layout);
-        layout.setHorizontalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addGap(8, 8, 8)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 214, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(tabellone, javax.swing.GroupLayout.PREFERRED_SIZE, 812, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(leftPanel, javax.swing.GroupLayout.PREFERRED_SIZE, 319, javax.swing.GroupLayout.PREFERRED_SIZE)
+        javax.swing.GroupLayout MatchPanelLayout = new javax.swing.GroupLayout(MatchPanel);
+        MatchPanel.setLayout(MatchPanelLayout);
+        MatchPanelLayout.setHorizontalGroup(
+            MatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(MatchPanelLayout.createSequentialGroup()
+                .addGroup(MatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(MatchPanelLayout.createSequentialGroup()
+                        .addComponent(jScrollPane4, javax.swing.GroupLayout.PREFERRED_SIZE, 214, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(2, 2, 2)
+                        .addComponent(tabellone, javax.swing.GroupLayout.PREFERRED_SIZE, 812, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(leftPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(MatchPanelLayout.createSequentialGroup()
+                        .addGap(75, 75, 75)
+                        .addComponent(checkPoint, javax.swing.GroupLayout.PREFERRED_SIZE, 98, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(167, 167, 167)
+                        .addComponent(titolo, javax.swing.GroupLayout.PREFERRED_SIZE, 697, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addGap(0, 0, Short.MAX_VALUE))
-            .addGroup(layout.createSequentialGroup()
-                .addGap(48, 48, 48)
-                .addComponent(jLabel9)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(titolo, javax.swing.GroupLayout.PREFERRED_SIZE, 556, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(406, 406, 406))
-        );
-        layout.setVerticalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                        .addGap(50, 50, 50)
-                        .addComponent(jLabel9)
-                        .addGap(16, 16, 16))
-                    .addGroup(layout.createSequentialGroup()
-                        .addGap(19, 19, 19)
-                        .addComponent(titolo, javax.swing.GroupLayout.PREFERRED_SIZE, 127, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(27, 27, 27)))
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(leftPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
-                        .addComponent(tabellone, javax.swing.GroupLayout.Alignment.LEADING)
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.LEADING)))
+            .addGroup(MatchPanelLayout.createSequentialGroup()
+                .addGap(35, 35, 35)
+                .addComponent(jLabel16)
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
+        MatchPanelLayout.setVerticalGroup(
+            MatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, MatchPanelLayout.createSequentialGroup()
+                .addGap(37, 37, 37)
+                .addGroup(MatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(titolo)
+                    .addComponent(checkPoint, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(69, 69, 69)
+                .addComponent(jLabel16)
+                .addGroup(MatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(MatchPanelLayout.createSequentialGroup()
+                        .addGap(14, 14, 14)
+                        .addGroup(MatchPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                            .addComponent(tabellone, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(jScrollPane4, javax.swing.GroupLayout.PREFERRED_SIZE, 596, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(32, 32, 32))
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, MatchPanelLayout.createSequentialGroup()
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(leftPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(22, 22, 22))))
+        );
+
+        tabellone.getAccessibleContext().setAccessibleName("tabellone");
+
+        getContentPane().add(MatchPanel, "matchpanel");
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void turnrActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_turnrActionPerformed
-          sendIstr("turnr");
-    }//GEN-LAST:event_turnrActionPerformed
-
-    private void turnlActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_turnlActionPerformed
-          sendIstr("turnl");
-    }//GEN-LAST:event_turnlActionPerformed
-
-    private void move1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_move1ActionPerformed
-         sendIstr("move1");
-    }//GEN-LAST:event_move1ActionPerformed
-
-    private void move2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_move2ActionPerformed
-        sendIstr("move2");
-    }//GEN-LAST:event_move2ActionPerformed
-
-    private void uturnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_uturnActionPerformed
-  sendIstr("uturn");
-    }//GEN-LAST:event_uturnActionPerformed
-
     private void move3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_move3ActionPerformed
-         sendIstr("move3");
+        //   sendIstr("move3");
     }//GEN-LAST:event_move3ActionPerformed
 
     private void backupActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_backupActionPerformed
-          sendIstr("backup");
+        // sendIstr("backup");
     }//GEN-LAST:event_backupActionPerformed
+
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
+        try {
+            InetAddress address = InetAddress.getByName("localhost");
+            Connection conn = Connection.connectToHost(address, 2222);
+            conn.addMessageObserver(this);
+            this.serverConn = conn;
+            Message msg = new Message(Match.MatchJoinRequestMsg);
+            Object[] pars = new Object[2];
+            pars[0] = nameArea.getText();
+            pars[1] = passwordText.getText();
+            msg.setParameters(pars);
+            conn.sendMessage(msg);
+        } catch (PartnerShutDownException | IOException e) {
+            System.out.println(e.getMessage());
+        }
+    }//GEN-LAST:event_jButton1ActionPerformed
+
+    private void playActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_playActionPerformed
+        sendIstr();
+    }//GEN-LAST:event_playActionPerformed
+
+    private void card1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card1ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[0];
+            contcard++;
+            model.addRow(new Object[]{cardpool[0].getImage()});
+            card1.setEnabled(false);
+        }
+    }//GEN-LAST:event_card1ActionPerformed
+
+    private void card2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card2ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[1];
+            contcard++;
+            model.addRow(new Object[]{cardpool[1].getImage()});
+            card2.setEnabled(false);
+        }
+    }//GEN-LAST:event_card2ActionPerformed
+
+    private void card3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card3ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[2];
+            contcard++;
+            model.addRow(new Object[]{cardpool[2].getImage()});
+            card3.setEnabled(false);
+        }
+    }//GEN-LAST:event_card3ActionPerformed
+
+    private void card4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card4ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[3];
+            contcard++;
+            model.addRow(new Object[]{cardpool[3].getImage()});
+            card4.setEnabled(false);
+        }
+    }//GEN-LAST:event_card4ActionPerformed
+
+    private void card5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card5ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[4];
+            contcard++;
+            model.addRow(new Object[]{cardpool[4].getImage()});
+            card5.setEnabled(false);
+        }
+    }//GEN-LAST:event_card5ActionPerformed
+
+    private void card6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card6ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[5];
+            contcard++;
+            model.addRow(new Object[]{cardpool[5].getImage()});
+            card6.setEnabled(false);
+        }
+    }//GEN-LAST:event_card6ActionPerformed
+
+    private void card7ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card7ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[6];
+            contcard++;
+            model.addRow(new Object[]{cardpool[6].getImage()});
+            card7.setEnabled(false);
+        }
+    }//GEN-LAST:event_card7ActionPerformed
+
+    private void card8ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card8ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[7];
+            contcard++;
+            model.addRow(new Object[]{cardpool[7].getImage()});
+            card8.setEnabled(false);
+        }
+    }//GEN-LAST:event_card8ActionPerformed
+
+    private void card9ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_card9ActionPerformed
+        if (contcard < 5) {
+            instructions[contcard] = cardpool[8];
+            contcard++;
+            model.addRow(new Object[]{cardpool[8].getImage()});
+            card9.setEnabled(false);
+        }
+    }//GEN-LAST:event_card9ActionPerformed
 
     public static void main(String args[]) {
         /* Set the Nimbus look and feel */
@@ -454,48 +616,44 @@ public class MatchUserApp extends javax.swing.JFrame {
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html
          */
-        try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
-        } catch (ClassNotFoundException ex) {
-            java.util.logging.Logger.getLogger(MatchUserApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (InstantiationException ex) {
-            java.util.logging.Logger.getLogger(MatchUserApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (IllegalAccessException ex) {
-            java.util.logging.Logger.getLogger(MatchUserApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
-            java.util.logging.Logger.getLogger(MatchUserApp.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        }
-        //</editor-fold>
 
+        //</editor-fold>
+        /* Create and display the form */
+        java.awt.EventQueue.invokeLater(() -> {
+            MatchUserApp.singleInstance = new MatchUserApp();
+            MatchUserApp.singleInstance.setVisible(true);
+
+        });
     }
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton backup;
+    private javax.swing.JPanel MatchPanel;
+    private javax.swing.JPanel RequestSender;
+    private javax.swing.JButton card1;
+    private javax.swing.JButton card2;
+    private javax.swing.JButton card3;
+    private javax.swing.JButton card4;
+    private javax.swing.JButton card5;
+    private javax.swing.JButton card6;
+    private javax.swing.JButton card7;
+    private javax.swing.JButton card8;
+    private javax.swing.JButton card9;
+    private javax.swing.JLabel checkPoint;
     private javax.swing.JPanel controlActionPanel;
+    private javax.swing.JButton jButton1;
     private javax.swing.JLabel jLabel1;
+    private javax.swing.JLabel jLabel15;
+    private javax.swing.JLabel jLabel16;
     private javax.swing.JLabel jLabel2;
-    private javax.swing.JLabel jLabel3;
-    private javax.swing.JLabel jLabel4;
-    private javax.swing.JLabel jLabel5;
-    private javax.swing.JLabel jLabel6;
-    private javax.swing.JLabel jLabel7;
-    private javax.swing.JLabel jLabel8;
-    private javax.swing.JLabel jLabel9;
     private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JScrollPane jScrollPane3;
+    private javax.swing.JScrollPane jScrollPane4;
     private javax.swing.JPanel leftPanel;
-    private javax.swing.JButton move1;
-    private javax.swing.JButton move2;
-    private javax.swing.JButton move3;
+    private javax.swing.JTextArea nameArea;
+    private javax.swing.JTextArea passwordText;
+    private java.awt.Button play;
     private javax.swing.JScrollPane scrollCardPanel;
     private javax.swing.JSplitPane tabellone;
     private javax.swing.JLabel titolo;
-    private javax.swing.JButton turnl;
-    private javax.swing.JButton turnr;
-    private javax.swing.JButton uturn;
     // End of variables declaration//GEN-END:variables
 }
